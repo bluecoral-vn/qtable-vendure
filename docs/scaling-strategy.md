@@ -260,7 +260,7 @@ Namespace: qtable-production
 │   └── Or: Cloud-managed (ElastiCache/Memorystore)
 │
 ├── Ingress: nginx-ingress
-│   ├── Wildcard cert: *.qtable.io
+│   ├── Wildcard cert: *.qtable.vn
 │   ├── Custom domain TLS: cert-manager + Let's Encrypt
 │   └── Rate limiting annotations per-tenant
 │

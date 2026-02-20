@@ -76,14 +76,14 @@ Request → TenantMiddleware → AuthGuard → TenantGuard → Resolver → Serv
 | # | Method | Source | Use Case | Priority |
 |---|--------|--------|----------|----------|
 | 1 | **Custom Domain** | `Host` header | `store.com` | Highest |
-| 2 | **Subdomain** | `Host` header | `tenant-slug.qtable.io` | High |
+| 2 | **Subdomain** | `Host` header | `tenant-slug.qtable.vn` | High |
 | 3 | **vendure-token Header** | Request header | API clients, mobile apps | Medium |
 | 4 | **API Key** | `X-API-Key` header | Server-to-server | Low |
 
 ### Detection Flow
 
 ```
-Host header: "alice-store.qtable.io"
+Host header: "alice-store.qtable.vn"
         │
         ▼
 ┌───────────────────────────┐
@@ -115,9 +115,9 @@ TenantDomain table:
 ┌────┬───────────────────────┬──────────┬───────────┐
 │ id │ domain                │ tenantId │ isPrimary │
 ├────┼───────────────────────┼──────────┼───────────┤
-│  1 │ alice.qtable.io       │     10   │   true    │
+│  1 │ alice.qtable.vn       │     10   │   true    │
 │  2 │ www.alice-store.com   │     10   │   false   │
-│  3 │ bob.qtable.io         │     20   │   true    │
+│  3 │ bob.qtable.vn         │     20   │   true    │
 └────┴───────────────────────┴──────────┴───────────┘
 ```
 
@@ -130,7 +130,7 @@ TenantDomain table:
 ```
  ┌─────────────────────────────────────────────────────┐
  │              HTTP Request                            │
- │  Host: alice.qtable.io                              │
+ │  Host: alice.qtable.vn                              │
  │  Authorization: Bearer <session_token>               │
  │  [vendure-token: <optional>]                        │
  └──────────────┬──────────────────────────────────────┘
@@ -233,7 +233,7 @@ The middleware MUST override any user-supplied `vendure-token` header:
 
 ```
 Incoming request:
-  Host: tenant-a.qtable.io
+  Host: tenant-a.qtable.vn
   vendure-token: <tenant-b-token>   ← MALICIOUS
 
 TenantContextMiddleware:

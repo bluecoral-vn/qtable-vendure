@@ -227,7 +227,7 @@ The middleware is registered via the plugin's `configuration` callback:
 ┌──────────────────────────────────────────────────────────┐
 │                   TenantContextMiddleware                 │
 │                                                          │
-│  Host: store-a.qtable.io                                │
+│  Host: store-a.qtable.vn                                │
 │      │                                                   │
 │      ▼                                                   │
 │  ┌─────────────────────────────┐                        │

@@ -144,7 +144,7 @@ createTenant(input)
 │   └── plan = 'trial'
 │
 ├── Step 4: Create TenantDomain
-│   ├── domain = `${input.slug}.qtable.io`
+│   ├── domain = `${input.slug}.qtable.vn`
 │   ├── tenantId = createdTenant.id
 │   └── isPrimary = true
 │

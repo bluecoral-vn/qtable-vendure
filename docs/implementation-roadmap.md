@@ -124,7 +124,7 @@ Establish the core multi-tenant infrastructure: database migration, Tenant entit
 
 - [ ] PostgreSQL is the default development database with migration workflow
 - [ ] A new tenant can be created via Admin API
-- [ ] Tenant is resolvable by subdomain (`tenant-slug.qtable.io`)
+- [ ] Tenant is resolvable by subdomain (`tenant-slug.qtable.vn`)
 - [ ] Tenant admin can log in and see only their data
 - [ ] Self-service registration creates a fully provisioned tenant
 - [ ] All E2E tests pass
