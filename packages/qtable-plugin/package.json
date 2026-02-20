@@ -1,0 +1,21 @@
+{
+    "name": "@qtable/vendure-plugin",
+    "version": "0.1.0",
+    "private": true,
+    "description": "QTable custom Vendure plugin — all custom business logic goes here",
+    "main": "src/index.ts",
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "watch": "tsc -w -p tsconfig.json",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "peerDependencies": {
+        "@vendure/common": "^3.5.4",
+        "@vendure/core": "^3.5.4"
+    },
+    "devDependencies": {
+        "typescript": "5.8.2",
+        "vitest": "^3.2.4"
+    }
+}
