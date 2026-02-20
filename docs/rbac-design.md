@@ -350,20 +350,48 @@ Permissions that a tenant admin is allowed to assign:
 | `ManageStaff` | Tenant | Invite/remove staff members |
 | `ViewAuditLog` | Both | View audit logs (scoped) |
 
-### Permission Registration
+---
 
-Custom permissions registered via `VendurePlugin.configuration`:
+## 8. Hard Constraints
+
+### Constraint: 1 User = 1 Tenant Channel
+
+A non-platform user MUST belong to exactly ONE tenant channel.
+
+| Rule | Enforcement Point |
+|------|-------------------|
+| User creation → assigned to creating tenant's channel only | TenantProvisioningService |
+| User CANNOT be added to another tenant's channel | RoleService override |
+| User CANNOT have roles in multiple tenant channels | Validation on role assignment |
+| Platform users (SuperAdmin, Operator) → Default Channel only | TenantGuard |
+
+### Constraint: Tenant Admin Cannot Assign System Permissions
 
 ```
-config.authOptions.customPermissions.push(
-    new PermissionDefinition({
-        name: 'ManageTenants',
-        description: 'Manage tenant lifecycle',
-    }),
-    new PermissionDefinition({
-        name: 'ManageTenant',
-        description: 'Manage own tenant configuration',
-    }),
-    // ... more
-);
+TENANT_BLOCKED_PERMISSIONS = [
+    SuperAdmin,
+    CreateChannel, DeleteChannel,
+    CreateSeller, DeleteSeller,
+    ManageTenants, ViewTenantList,
+    ViewPlatformAnalytics, ManagePlans
+]
 ```
+
+Enforced in `RoleService` — any attempt to include blocked permissions → reject with error.
+
+---
+
+## 9. Privilege Escalation Test Matrix
+
+| # | Attack Vector | Test Action | Expected Result | Priority |
+|---|--------------|-------------|----------------|----------|
+| 1 | Self-promote to SuperAdmin | Tenant admin calls `updateRole` with SuperAdmin permission | ❌ Rejected — permission not in whitelist | 🔴 P0 |
+| 2 | Cross-channel role | Tenant A admin creates role for Channel B | ❌ Rejected — channel ownership check | 🔴 P0 |
+| 3 | Access Default Channel | Tenant admin sends request to Default Channel | ❌ 403 Forbidden by TenantGuard | 🔴 P0 |
+| 4 | Create new Channel | Tenant admin calls `createChannel` mutation | ❌ Rejected — no `CreateChannel` permission | 🟡 P1 |
+| 5 | Multi-channel membership | Add same user to two tenant channels | ❌ Rejected — 1 user = 1 tenant constraint | 🔴 P0 |
+| 6 | Token substitution | Tenant A admin sends Tenant B's vendure-token | ❌ Overridden by middleware — stays in Tenant A | 🔴 P0 |
+| 7 | Call platform mutations | Tenant admin calls `createTenant` | ❌ Rejected — no `ManageTenants` permission | 🔴 P0 |
+| 8 | Login cross-tenant | User at Tenant A tries login at domain Tenant B | ❌ Session invalid — channel mismatch | 🔴 P0 |
+| 9 | Modify system roles | Tenant admin tries to update `__super_admin_role` | ❌ Rejected — system role protection | 🟡 P1 |
+| 10 | Escalate via API key | Use API key bound to Tenant A on Tenant B domain | ❌ Rejected — API key validated against tenant | 🟡 P1 |

@@ -1,14 +1,14 @@
 # Plugin Architecture — Multi-Tenant
 
-> **Date:** 2026-02-20  
-> **Purpose:** Architecture design for multi-tenant plugin system in Vendure  
-> **Scope:** Plugin structure, lifecycle hooks, RequestContext extension, service layer injection
+> **Date:** 2026-02-20
+> **Purpose:** Architecture design for multi-tenant plugin system in Vendure
+> **Scope:** Plugin structure, lifecycle hooks, RequestContext extension, middleware, service layer, entities, API
 
 ---
 
 ## Table of Contents
 
-1. [Should Channel Be Used as Tenant?](#1-should-channel-be-used-as-tenant)
+1. [Tenant Wraps Channel](#1-tenant-wraps-channel)
 2. [Plugin Structure](#2-plugin-structure)
 3. [Lifecycle Hooks](#3-lifecycle-hooks)
 4. [RequestContext Extension](#4-requestcontext-extension)
@@ -19,17 +19,7 @@
 
 ---
 
-## 1. Should Channel Be Used as Tenant?
-
-### Analysis
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Channel = Tenant** | Leverages ALL existing filtering; zero changes to core queries | Inherits ManyToMany sharing; limited tenant metadata |
-| **Separate Tenant entity** | Full control over tenant lifecycle; clean domain model | Must replicate or bridge Channel filtering |
-| **Tenant wraps Channel** ✅ | Best of both worlds; uses Channel for data filtering, Tenant for business logic | Slight indirection cost |
-
-### Decision: Tenant Wraps Channel
+## 1. Tenant Wraps Channel
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -48,7 +38,7 @@
 ```
 
 **Why this approach:**
-- Vendure's ListQueryBuilder, service methods, and resolvers all filter by `ctx.channelId`
+- Vendure's ListQueryBuilder, services, and resolvers all filter by `ctx.channelId`
 - Reusing Channel means **zero changes to Vendure core**
 - Tenant entity adds SaaS-specific logic: domain routing, subscription, lifecycle states
 
@@ -56,10 +46,8 @@
 
 ## 2. Plugin Structure
 
-### Proposed Plugin Layout
-
 ```
-packages/qtable-plugin/
+packages/qtable-saas/
 ├── src/
 │   ├── qtable.plugin.ts              # Plugin entry point
 │   │
@@ -76,12 +64,12 @@ packages/qtable-plugin/
 │   ├── api/
 │   │   ├── resolvers/
 │   │   │   ├── tenant-admin.resolver.ts   # Global admin: manage tenants
-│   │   │   └── tenant-self.resolver.ts    # Tenant admin: manage own tenant
+│   │   │   └── tenant-self.resolver.ts    # Tenant admin: manage own
 │   │   ├── schema/
 │   │   │   ├── tenant-admin.api.graphql
 │   │   │   └── tenant-shop.api.graphql
 │   │   └── middleware/
-│   │       └── tenant-context.middleware.ts # Domain → Channel resolution
+│   │       └── tenant-context.middleware.ts
 │   │
 │   ├── events/
 │   │   ├── tenant-created.event.ts
@@ -89,10 +77,7 @@ packages/qtable-plugin/
 │   │   └── tenant-deleted.event.ts
 │   │
 │   ├── guards/
-│   │   └── tenant-guard.ts           # Cross-tenant access prevention
-│   │
-│   ├── strategies/
-│   │   └── tenant-aware-auth.strategy.ts
+│   │   └── tenant-guard.ts
 │   │
 │   └── config/
 │       └── tenant-plugin-options.ts
@@ -113,13 +98,13 @@ packages/qtable-plugin/
 
 | Hook | Purpose | Mechanism |
 |------|---------|-----------|
-| **Bootstrap** (`OnApplicationBootstrap`) | Initialize tenant cache, validate default channel | NestJS lifecycle |
-| **Per-Request** (NestJS Middleware) | Resolve domain → tenant → channel | `configuration` callback |
-| **AuthGuard** (Custom Guard) | Enforce tenant boundaries after auth | Custom guard wrapping existing AuthGuard |
-| **Entity Save** (TypeORM Subscriber) | Ensure tenant association on write | TypeORM entity subscriber |
-| **Query Execution** (Query Interceptor) | Verify channel filter presence | TypeORM query subscriber |
-| **Event Processing** (EventBus Subscriber) | Filter events by tenant | EventBus.ofType() |
-| **Job Processing** (Job Queue) | Carry tenant context into background jobs | RequestContext serialization |
+| **Bootstrap** | Initialize tenant cache, validate default channel | `OnApplicationBootstrap` |
+| **Per-Request** | Resolve domain → tenant → channel | NestJS Middleware |
+| **AuthGuard** | Enforce tenant boundaries after auth | Custom guard |
+| **Entity Save** | Ensure tenant association on write | TypeORM subscriber |
+| **Query Execution** | Verify channel filter presence | TypeORM query subscriber |
+| **Event Processing** | Filter events by tenant | `EventBus.ofType()` |
+| **Job Processing** | Carry tenant context into background jobs | RequestContext serialization |
 
 ### Request Lifecycle with Tenant Plugin
 
@@ -129,34 +114,33 @@ packages/qtable-plugin/
 2. TenantContextMiddleware (NEW)
    ├── Extract domain from Host header
    ├── TenantResolutionService.resolve(domain)
-   │   └── Returns { tenantId, channelToken }
-   ├── Inject vendure-token header if not present
+   ├── OVERRIDE vendure-token header
    └── Attach tenantId to request object
    │
 3. AuthGuard (Vendure built-in)
    ├── Session validation
-   ├── Channel resolution (uses vendure-token)
+   ├── Channel resolution (uses overridden vendure-token)
    └── RequestContext creation
    │
-4. TenantGuard (NEW, runs after AuthGuard)
+4. TenantGuard (NEW)
    ├── Verify ctx.channelId matches resolved tenantId
-   ├── Prevent Default Channel access for non-global-admins
+   ├── Block Default Channel for non-global-admins
    └── Log cross-tenant attempt if detected
    │
 5. Resolver + Service Layer
    │
-6. Database query (with channel filter)
+6. Database query (with channel filter + RLS)
 ```
 
 ---
 
 ## 4. RequestContext Extension
 
-### Approach: Do NOT extend RequestContext class
+### Approach: DO NOT extend RequestContext class
 
-Extending `RequestContext` would require modifying Vendure core. Instead:
+Extending `RequestContext` requires modifying Vendure core. Instead, use combined approach:
 
-### Option A: Use Request Object (Recommended)
+### Request Object (Runtime context)
 
 Store tenant information on the Express Request object:
 
@@ -170,33 +154,23 @@ req[TENANT_CONTEXT_KEY] = {
 }
 ```
 
-Access pattern: Create a `@TenantCtx()` decorator that extracts tenant info from `req`.
+Access via `@TenantCtx()` custom parameter decorator.
 
-### Option B: Use Channel Custom Fields
+### Channel Custom Fields (Persistent link)
 
 Add tenant metadata to Channel's `customFields`:
 - `tenantId` → Tenant entity reference
 - `tenantSlug`
-- `tenantStatus`
 
 Access via `ctx.channel.customFields.tenantId`.
 
-### Recommended: Option A + Option B Combined
-
-- **Option A** for runtime tenant context (plan limits, feature flags, status)
-- **Option B** for persistent tenant link (stored in DB, survives restarts)
+**Combined:** Request object for runtime (plan, limits, status), Channel customFields for persistent DB link.
 
 ---
 
 ## 5. Middleware Strategy
 
-### Global Middleware Required?
-
-**Yes.** A global NestJS middleware is needed to resolve tenant from domain before Vendure's AuthGuard runs.
-
 ### Registration via Plugin Configuration
-
-The middleware is registered via the plugin's `configuration` callback:
 
 ```
 @VendurePlugin({
@@ -216,58 +190,24 @@ The middleware is registered via the plugin's `configuration` callback:
 | Responsibility | Details |
 |---------------|---------|
 | Domain resolution | `Host` header → TenantDomain entity lookup |
-| Channel token injection | Set `vendure-token` header from resolved tenant |
-| Tenant status check | Reject requests for suspended/deleted tenants |
-| Caching | Cache domain → tenant mapping (Redis or in-memory) |
-| Fallback | Unknown domain → 404 or redirect to platform |
-
-### Middleware Flow Diagram
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                   TenantContextMiddleware                 │
-│                                                          │
-│  Host: store-a.qtable.vn                                │
-│      │                                                   │
-│      ▼                                                   │
-│  ┌─────────────────────────────┐                        │
-│  │ TenantResolutionService     │                        │
-│  │ ┌─────────────────────────┐ │                        │
-│  │ │ 1. Check cache          │ │                        │
-│  │ │ 2. Query TenantDomain   │ │                        │
-│  │ │ 3. Return Tenant +      │ │                        │
-│  │ │    Channel token        │ │                        │
-│  │ └─────────────────────────┘ │                        │
-│  └──────────┬──────────────────┘                        │
-│             │                                           │
-│      ┌──────▼────────────────────────┐                  │
-│      │ Tenant Status Check            │                  │
-│      │ ├── active  → continue        │                  │
-│      │ ├── suspended → 403           │                  │
-│      │ ├── trial   → continue + flag │                  │
-│      │ └── deleted → 404             │                  │
-│      └──────┬────────────────────────┘                  │
-│             │                                           │
-│      ┌──────▼────────────────────────┐                  │
-│      │ Inject vendure-token header   │                  │
-│      │ Attach tenant context to req  │                  │
-│      └───────────────────────────────┘                  │
-└──────────────────────────────────────────────────────────┘
-```
+| Token override | ALWAYS override `vendure-token` from resolved tenant |
+| Status check | Reject suspended/deleted tenants |
+| Caching | Cache domain → tenant mapping (Redis) |
+| Fallback | Unknown domain → 404 (NEVER Default Channel) |
 
 ---
 
 ## 6. Service Layer Integration
 
-### How Tenant Context Flows Through Services
+### Context Flow
 
 ```
 Resolver (@Ctx() ctx, @TenantCtx() tenant)
     │
     ▼
 Service.method(ctx, ...)
-    │ ctx.channelId → used for data filtering (existing behavior)
-    │ tenant.tenantId → used for tenant-specific logic (new)
+    │ ctx.channelId → data filtering (existing)
+    │ tenant.tenantId → tenant-specific logic (new)
     │
     ▼
 TransactionalConnection.getRepository(ctx, Entity)
@@ -281,10 +221,10 @@ Database (RLS enforces channelId match)
 
 | Category | Tenant Awareness | Changes Needed |
 |----------|-----------------|---------------|
-| **Core Vendure services** | Already filter by `ctx.channelId` | None (Channel = Tenant) |
-| **Custom tenant services** | New, fully tenant-aware | Design from scratch |
-| **Background jobs** | Must carry tenant context | Serialize tenant info in job data |
-| **Event handlers** | Must filter by tenant | Check event's channel against subscriber's tenant |
+| **Core Vendure services** | Already filter by `ctx.channelId` | None |
+| **Custom tenant services** | Fully tenant-aware | Design from scratch |
+| **Background jobs** | Must carry tenant context | Serialize tenant info |
+| **Event handlers** | Must filter by tenant | Check event's channel |
 
 ---
 
@@ -299,9 +239,9 @@ Database (RLS enforces channelId match)
 | `slug` | string (unique) | URL-safe identifier |
 | `status` | enum | `active`, `trial`, `suspended`, `deleted` |
 | `channelId` | FK → Channel | 1:1 link to Vendure Channel |
-| `ownerId` | FK → Administrator | Tenant owner (first admin) |
+| `ownerId` | FK → Administrator | Tenant owner |
 | `plan` | string | Subscription plan identifier |
-| `config` | jsonb | Per-tenant configuration blob |
+| `config` | jsonb | Per-tenant configuration |
 | `createdAt` | timestamp | |
 | `updatedAt` | timestamp | |
 | `suspendedAt` | timestamp? | When suspended |
@@ -318,18 +258,6 @@ Database (RLS enforces channelId match)
 | `sslStatus` | enum | SSL certificate status |
 | `verifiedAt` | timestamp? | Domain ownership verified |
 
-### TenantConfig (within `config` jsonb)
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `maxProducts` | number | Product limit |
-| `maxAdmins` | number | Admin account limit |
-| `maxStorage` | number (MB) | Asset storage limit |
-| `features` | string[] | Enabled feature flags |
-| `theme` | object | Branding configuration |
-| `emailFrom` | string | Custom sender email |
-| `timezone` | string | Tenant timezone |
-
 ---
 
 ## 8. API Design
@@ -338,26 +266,26 @@ Database (RLS enforces channelId match)
 
 | Operation | Permission | Description |
 |-----------|-----------|-------------|
-| `tenants` (query) | `SuperAdmin` | List all tenants with filtering |
-| `tenant(id)` (query) | `SuperAdmin` | Get tenant details |
-| `createTenant` (mutation) | `SuperAdmin` | Provision new tenant |
-| `updateTenant` (mutation) | `SuperAdmin` | Update tenant config |
-| `suspendTenant` (mutation) | `SuperAdmin` | Suspend tenant |
-| `deleteTenant` (mutation) | `SuperAdmin` | Soft-delete tenant |
-| `reactivateTenant` (mutation) | `SuperAdmin` | Reactivate suspended tenant |
+| `tenants` (query) | `ManageTenants` | List all tenants |
+| `tenant(id)` (query) | `ManageTenants` | Get tenant details |
+| `createTenant` (mutation) | `ManageTenants` | Provision new tenant |
+| `updateTenant` (mutation) | `ManageTenants` | Update tenant config |
+| `suspendTenant` (mutation) | `ManageTenants` | Suspend tenant |
+| `deleteTenant` (mutation) | `ManageTenants` | Soft-delete tenant |
+| `reactivateTenant` (mutation) | `ManageTenants` | Reactivate |
 
 ### Admin API Extensions (Tenant Self-Service)
 
 | Operation | Permission | Description |
 |-----------|-----------|-------------|
 | `myTenant` (query) | `Authenticated` | Get own tenant info |
-| `updateMyTenant` (mutation) | Custom: `ManageTenant` | Update own tenant config |
-| `addDomain` (mutation) | Custom: `ManageTenant` | Add custom domain |
-| `removeDomain` (mutation) | Custom: `ManageTenant` | Remove custom domain |
+| `updateMyTenant` (mutation) | `ManageTenant` | Update own config |
+| `addDomain` (mutation) | `ManageTenant` | Add custom domain |
+| `removeDomain` (mutation) | `ManageTenant` | Remove custom domain |
 
 ### Shop API Extensions
 
 | Operation | Permission | Description |
 |-----------|-----------|-------------|
-| `registerTenant` (mutation) | `Public` | Self-service tenant registration |
-| `tenantInfo` (query) | `Public` | Public tenant info (name, branding) |
+| `registerTenant` (mutation) | `Public` | Self-service registration |
+| `tenantInfo` (query) | `Public` | Public tenant info |

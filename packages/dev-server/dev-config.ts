@@ -21,6 +21,7 @@ import 'dotenv/config';
 import path from 'path';
 import { DataSourceOptions } from 'typeorm';
 import { ReviewsPlugin } from './test-plugins/reviews/reviews-plugin';
+import { QTablePlugin } from '../qtable-saas/src';
 
 const IS_INSTRUMENTED = process.env.IS_INSTRUMENTED === 'true';
 
@@ -58,6 +59,7 @@ export const devConfig: VendureConfig = {
         synchronize: false,
         logging: false,
         migrations: [path.join(__dirname, 'migrations/*.ts')],
+        migrationsRun: true,
         ...getDbConfig(),
     },
     paymentOptions: {
@@ -85,6 +87,7 @@ export const devConfig: VendureConfig = {
         //     platformFeeSKU: 'FEE',
         // }),
         ReviewsPlugin,
+        QTablePlugin,
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({
             route: 'assets',
@@ -116,10 +119,10 @@ export const devConfig: VendureConfig = {
         ...(IS_INSTRUMENTED ? [TelemetryPlugin.init({})] : []),
         ...(process.env.ENABLE_SENTRY === 'true' && process.env.SENTRY_DSN
             ? [
-                  SentryPlugin.init({
-                      includeErrorTestMutation: true,
-                  }),
-              ]
+                SentryPlugin.init({
+                    includeErrorTestMutation: true,
+                }),
+            ]
             : []),
         // AdminUiPlugin.init({
         //     route: 'admin',
@@ -177,12 +180,11 @@ export const devConfig: VendureConfig = {
 };
 
 function getDbConfig(): DataSourceOptions {
-    const dbType = process.env.DB || 'mysql';
+    const dbType = process.env.DB || 'postgres';
     switch (dbType) {
         case 'postgres':
             console.log('Using postgres connection');
             return {
-                synchronize: true,
                 type: 'postgres',
                 host: process.env.DB_HOST || 'localhost',
                 port: Number(process.env.DB_PORT) || 5432,

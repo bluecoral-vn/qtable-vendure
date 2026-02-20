@@ -1,0 +1,2 @@
+name,slug,description,assets,facets,optionGroups,optionValues,sku,price,taxCategory,stockOnHand,trackInventory,variantFacets
+Test Product,test-product,A test product,,,,,,100,Standard Tax,100,true,

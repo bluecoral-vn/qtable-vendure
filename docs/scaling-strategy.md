@@ -330,3 +330,59 @@ Total PVC:    500Gi
 | Resource quotas | Storage, products, admins per plan |
 | Background job priority | Higher plan = higher queue priority |
 | Dedicated worker pools | Enterprise tenants get dedicated workers |
+
+---
+
+## 7. Query Plan Analysis
+
+### Expected EXPLAIN Output for Key Queries
+
+| Query | Expected Plan | Red Flag |
+|-------|--------------|----------|
+| Product list by channel | Index Scan on `idx_product_channel_both` | Seq Scan on product or join table |
+| Order list by channel + date | Index Scan on `idx_order_channel_date` | Seq Scan on order |
+| Customer lookup by channel | Index Scan on `idx_customer_channel` | Seq Scan on customer_channels |
+| Tenant resolution by domain | Index Only Scan on `idx_tenant_domain` | Seq Scan on tenant_domain |
+| Tenant resolution by slug | Index Only Scan on `idx_tenant_slug` | Seq Scan on tenant |
+
+### Performance Guard Rule
+
+Every query touching tenant-scoped data MUST be verified with `EXPLAIN ANALYZE`:
+1. No `Seq Scan` on tables > 10K rows
+2. Index used must include `channelId` as leading column
+3. Estimated rows should match tenant's data size, not total DB size
+
+---
+
+## 8. Cache Collision Prevention
+
+### Proof: All Cache Keys Are Tenant-Namespaced
+
+| Cache Type | Key Pattern | Tenant Component | Collision Risk |
+|-----------|-------------|------------------|---------------|
+| Channel resolution | `channel:token:<token>` | token is unique per tenant | ✅ None |
+| Tenant resolution | `tenant:domain:<domain>` | domain is unique per tenant | ✅ None |
+| Product list | `products:ch:<channelId>:page:<n>` | channelId is unique | ✅ None |
+| Session | `session:<sessionToken>` | sessionToken is unique | ✅ None |
+| Role permissions | `perms:user:<userId>:ch:<channelId>` | channelId included | ✅ None |
+| Rate limit | `rl:tenant:<tenantId>:min:<ts>` | tenantId included | ✅ None |
+
+### Rule: Every new cache key MUST include tenantId or channelId.
+
+Keys without tenant scope are only allowed for global platform data (e.g., plan definitions).
+
+---
+
+## 9. In-Memory Cache Replacement
+
+> [!WARNING]
+> **Vendure's `SelfRefreshingCache` is in-memory and per-instance.**
+> It MUST be replaced with Redis-backed cache BEFORE horizontal scaling.
+> Otherwise, cache invalidation will race between instances.
+
+| What to replace | Current | Target |
+|----------------|---------|--------|
+| Channel cache | In-memory `SelfRefreshingCache` | Redis-backed with event-driven invalidation |
+| Session store | In-memory | Redis |
+| Job queue | In-memory | BullMQ (Redis-backed) |
+| Tenant resolution cache | Does not exist | Redis with 5-min TTL |

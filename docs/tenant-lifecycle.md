@@ -192,6 +192,29 @@ Each provisioning step must be idempotent:
 | Admin creation | Retry | Tenant exists, just retry admin |
 | Domain setup | Retry | Tenant usable without custom domain |
 
+### Idempotency Guarantees
+
+Every provisioning step MUST be idempotent. Verification:
+
+| Step | Idempotency Check | Unique Constraint |
+|------|-------------------|-------------------|
+| Create Seller | Check `Seller.name` exists | No unique (must check manually) |
+| Create Channel | Check `Channel.code` exists | `UNIQUE(code)` |
+| Create Tenant | Check `Tenant.slug` exists | `UNIQUE(slug)` |
+| Create TenantDomain | Check `TenantDomain.domain` exists | `UNIQUE(domain)` |
+| Create Role | Check `Role.code` exists | `UNIQUE(code)` |
+| Create Admin | Check `User.email` exists | Email uniqueness |
+| Create defaults | Check existence before create | N/A |
+
+### Concurrent Provisioning Safety
+
+| Scenario | Protection | Test |
+|----------|------------|------|
+| 2 tenants with same slug | `UNIQUE(slug)` constraint → DB rejects | Create 10 tenants concurrently with overlapping slugs |
+| 2 tenants with same domain | `UNIQUE(domain)` constraint → DB rejects | Create 10 tenants concurrently with overlapping domains |
+| Channel token collision | `generateToken()` + `UNIQUE(token)` | Verify tokens are unique across 1K tenants |
+| Partial failure + retry | Idempotent steps → safe to retry | Fail at step 5, retry → verify no duplicates |
+
 ---
 
 ## 4. Config Setup
@@ -347,6 +370,26 @@ Phase 3: Hard delete (after 90 days from soft delete)
 11. Assets (files from storage)
 12. Channel
 13. Seller
+```
+
+### Rollback Procedures
+
+| Phase | Rollback Action | Who Can Trigger |
+|-------|----------------|----------------|
+| **PENDING_DELETION** → ACTIVE | Set status back to previous, re-enable access | Tenant admin (within 30-day grace) |
+| **DELETED** → ACTIVE | Restore from archived data, re-create Channel + Seller if purged | Platform admin only |
+| **PURGED** | ❌ IRREVERSIBLE — data permanently destroyed | N/A |
+
+Rollback from PENDING_DELETION:
+```
+cancelDeletion(tenantId)
+├── 1. Verify status = 'PENDING_DELETION'
+├── 2. Set status = previous status (ACTIVE or TRIAL)
+├── 3. Clear deletedAt
+├── 4. Refresh tenant cache
+├── 5. Resume background jobs
+├── 6. Emit TenantReactivatedEvent
+└── 7. Notify tenant owner
 ```
 
 ---

@@ -1,8 +1,9 @@
 # Implementation Roadmap — Multi-Tenant SaaS
 
-> **Date:** 2026-02-20  
-> **Purpose:** Phased implementation plan for multi-tenant SaaS on Vendure  
+> **Date:** 2026-02-20
+> **Purpose:** Phased implementation plan for multi-tenant SaaS on Vendure
 > **Scope:** Foundation → Isolation → Production → Scale
+> **Business Context:** Tenant = merchant/store on the platform, each with own domain, products, orders, customers, config
 
 ---
 
@@ -77,13 +78,13 @@ Establish the core multi-tenant infrastructure: database migration, Tenant entit
     ├── Create Tenant entity (id, name, slug, status, channelId, config, etc.)
     ├── Create TenantService (CRUD + lifecycle state transitions)
     ├── Create TenantConfig type (limits, features, branding)
-    └── Register entities in qtable-plugin
+    └── Register entities in qtable-saas
 
 1.3 TenantDomain Entity
     ├── Create entity (domain, tenantId, isPrimary, verifiedAt)
     ├── Create TenantResolutionService (domain → tenant lookup)
     ├── Add SelfRefreshingCache for domain resolution
-    └── Register entity in qtable-plugin
+    └── Register entity in qtable-saas
 
 1.4 TenantContextMiddleware
     ├── Create NestJS middleware
@@ -419,3 +420,49 @@ Phase 1.1 (PostgreSQL)
                                      │
                               Phase 4.x (Scale)
 ```
+
+---
+
+## Blocker Resolution Map
+
+Every production blocker from the readiness assessment is mapped to a specific deliverable:
+
+| Blocker | Description | Resolved By | Phase |
+|---------|-------------|-------------|-------|
+| B-001 | Default Channel = god mode | 2.3 Default Channel restriction | Phase 2 |
+| B-002 | No tenant middleware | 1.4 TenantContextMiddleware | Phase 1 |
+| B-003 | Tenant resolution does not exist | 1.2 + 1.3 Tenant + TenantDomain entities | Phase 1 |
+| B-004 | No PostgreSQL, no migrations | 1.1 PostgreSQL migration | Phase 1 |
+| B-005 | No audit log | 2.6 Audit logging | Phase 2 |
+| B-006 | No privilege escalation prevention | 2.2 TenantGuard + 2.3 Default Channel | Phase 2 |
+| B-007 | In-memory cache, no Redis | 4.1 Redis caching layer | Phase 4 |
+
+---
+
+## Test Enforcement Gates
+
+### Per-Phase Test Requirements
+
+| Phase | Test Type | Minimum Count | CI Gate |
+|-------|-----------|---------------|--------|
+| Phase 1 | Provisioning + resolution tests | 8 | ✅ Block merge |
+| Phase 2 | Isolation + escalation + audit tests | 20 | ✅ Block merge |
+| Phase 3 | Lifecycle + backup/restore tests | 10 | ✅ Block merge |
+| Phase 4 | Performance + load tests | 5 | ⚠️ Warning only |
+
+### Business Gap Coverage
+
+| Gap | Description | Phase | Deliverable |
+|-----|-------------|-------|-------------|
+| G1 | No Tenant entity | Phase 1 | 1.2 |
+| G2 | No tenant detection | Phase 1 | 1.3 + 1.4 |
+| G3 | ManyToMany data sharing | Phase 2 | 2.1-2.5 |
+| G4 | No SuperAdmin boundary | Phase 2 | 2.2 + 2.3 |
+| G5 | No onboarding workflow | Phase 1 | 1.5 |
+| G6 | No per-tenant config | Phase 1 | 1.2 |
+| G7 | No audit logging | Phase 2 | 2.6 |
+| G8 | No rate limiting | Phase 4 | 4.3 |
+| G9 | No asset isolation | Phase 3 | 3.3 |
+| G10 | No per-tenant email | Phase 3 | 3.3 |
+| G11 | No search isolation | Phase 4 | 4.4 |
+| G12 | No backup/restore | Phase 3 | 3.5 |

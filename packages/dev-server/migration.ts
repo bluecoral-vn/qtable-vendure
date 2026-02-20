@@ -13,15 +13,15 @@ program
 program
     .command('run')
     .description('Run all pending migrations')
-    .action(() => {
-        return runMigrations(devConfig);
+    .action(async () => {
+        await runMigrations(devConfig);
     });
 
 program
     .command('revert')
     .description('Revert the last applied migration')
-    .action(() => {
-        return revertLastMigration(devConfig);
+    .action(async () => {
+        await revertLastMigration(devConfig);
     });
 
 program.parse(process.argv);

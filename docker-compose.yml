@@ -52,16 +52,16 @@ services:
         ports:
             - '5432:5432'
         command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c pg_stat_statements.max=100000 -c max_connections=200
-    postgres_16:
-        image: postgres:16
-        container_name: postgres_16
+    postgres_17:
+        image: postgres:17
+        container_name: postgres_17
         environment:
             POSTGRES_DB: vendure-dev
             POSTGRES_USER: vendure
             POSTGRES_PASSWORD: password
             PGDATA: /var/lib/postgresql/data
         volumes:
-            - postgres_16_data:/var/lib/postgresql/data
+            - postgres_17_data:/var/lib/postgresql/data
         ports:
             - '5432:5432'
         command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c pg_stat_statements.max=100000 -c max_connections=200
@@ -138,7 +138,7 @@ networks:
         driver: bridge
 
 volumes:
-    postgres_16_data:
+    postgres_17_data:
         driver: local
     postgres_12_data:
         driver: local

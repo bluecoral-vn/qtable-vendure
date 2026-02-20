@@ -1,20 +1,23 @@
 {
-    "name": "@qtable/vendure-plugin",
+    "name": "@qtable/vendure-saas",
     "version": "0.1.0",
     "private": true,
-    "description": "QTable custom Vendure plugin — all custom business logic goes here",
+    "description": "QTable SaaS plugin — multi-tenant business logic for Vendure",
     "main": "src/index.ts",
     "scripts": {
         "build": "tsc -p tsconfig.json",
         "watch": "tsc -w -p tsconfig.json",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "e2e": "vitest run --config vitest.e2e.config.ts"
     },
     "peerDependencies": {
         "@vendure/common": "^3.5.4",
         "@vendure/core": "^3.5.4"
     },
     "devDependencies": {
+        "@vendure/testing": "^3.5.4",
+        "graphql-tag": "^2.12.6",
         "typescript": "5.8.2",
         "vitest": "^3.2.4"
     }
