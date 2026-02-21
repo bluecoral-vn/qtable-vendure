@@ -14,6 +14,7 @@ import {
     TenantProvisioningService,
     AuditService,
 } from './services';
+import { TenantPurgeJob } from './services/tenant-purge.job';
 
 /**
  * QTablePlugin — Entry point for all custom QTable SaaS business logic.
@@ -44,6 +45,7 @@ import {
         TenantProvisioningService,
         TenantContextMiddleware,
         AuditService,
+        TenantPurgeJob,
         {
             provide: APP_GUARD,
             useClass: TenantGuard,

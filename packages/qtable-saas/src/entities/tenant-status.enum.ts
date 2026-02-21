@@ -14,8 +14,10 @@ export enum TenantStatus {
     ACTIVE = 'ACTIVE',
     /** Tenant is suspended (no access, data preserved) */
     SUSPENDED = 'SUSPENDED',
-    /** Tenant is pending deletion (grace period) */
+    /** Tenant is pending deletion (grace period — reversible) */
     PENDING_DELETION = 'PENDING_DELETION',
-    /** Tenant data has been soft-deleted */
+    /** Tenant data has been soft-deleted (30-day grace period before purge) */
     DELETED = 'DELETED',
+    /** Tenant data fully removed, entity kept for audit trail */
+    PURGED = 'PURGED',
 }

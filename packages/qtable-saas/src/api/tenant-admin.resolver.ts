@@ -133,6 +133,16 @@ export class TenantAdminResolver {
     ) {
         return this.tenantService.removeDomain(ctx, args.tenantId, args.domainId);
     }
+
+    @Transaction()
+    @Mutation()
+    @Allow(Permission.SuperAdmin)
+    async deleteTenant(
+        @Ctx() ctx: RequestContext,
+        @Args() args: { id: string },
+    ) {
+        return this.tenantService.changeStatus(ctx, args.id, TenantStatus.PENDING_DELETION);
+    }
 }
 
 /**

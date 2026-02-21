@@ -12,6 +12,7 @@ const commonApiExtensions = gql`
         SUSPENDED
         PENDING_DELETION
         DELETED
+        PURGED
     }
 
     type TenantDomain implements Node {
@@ -147,6 +148,8 @@ export const adminApiExtensions = gql`
         provisionTenant(input: ProvisionTenantInput!): ProvisionTenantResult!
         updateTenant(input: UpdateTenantInput!): Tenant!
         changeTenantStatus(id: ID!, status: TenantStatus!): Tenant!
+        """ Initiates 3-phase deletion: PENDING_DELETION (grace) → DELETED (30d) → PURGED (90d auto) """
+        deleteTenant(id: ID!): Tenant!
         addTenantDomain(input: AddTenantDomainInput!): TenantDomain!
         removeTenantDomain(tenantId: ID!, domainId: ID!): Boolean!
     }
@@ -158,8 +161,27 @@ export const adminApiExtensions = gql`
 export const shopApiExtensions = gql`
     ${commonApiExtensions}
 
+    input UpdateMyTenantInput {
+        name: String
+        config: JSON
+    }
+
+    input AddMyDomainInput {
+        domain: String!
+        isPrimary: Boolean
+    }
+
     extend type Query {
         """ Returns the current tenant based on the resolved domain/channel. """
         currentTenant: Tenant
+    }
+
+    extend type Mutation {
+        """ Update current tenant (name, config). Requires authenticated admin. """
+        updateMyTenant(input: UpdateMyTenantInput!): Tenant!
+        """ Add a domain to current tenant. """
+        addMyDomain(input: AddMyDomainInput!): TenantDomain!
+        """ Remove a domain from current tenant. """
+        removeMyDomain(domainId: ID!): Boolean!
     }
 `;

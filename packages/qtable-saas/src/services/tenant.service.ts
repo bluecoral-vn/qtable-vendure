@@ -259,7 +259,8 @@ export class TenantService {
             [TenantStatus.ACTIVE]: [TenantStatus.SUSPENDED, TenantStatus.PENDING_DELETION],
             [TenantStatus.SUSPENDED]: [TenantStatus.ACTIVE, TenantStatus.PENDING_DELETION],
             [TenantStatus.PENDING_DELETION]: [TenantStatus.ACTIVE, TenantStatus.DELETED],
-            [TenantStatus.DELETED]: [],
+            [TenantStatus.DELETED]: [TenantStatus.PURGED],
+            [TenantStatus.PURGED]: [],
         };
 
         if (!allowed[from]?.includes(to)) {
