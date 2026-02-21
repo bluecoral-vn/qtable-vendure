@@ -10,6 +10,7 @@ import { CurrencyCode, LanguageCode } from '@vendure/common/lib/generated-types'
 
 import { TenantService } from '../services/tenant.service';
 import { TenantProvisioningService } from '../services/tenant-provisioning.service';
+import { AuditService } from '../services/audit.service';
 import { TenantStatus } from '../entities/tenant-status.enum';
 
 /**
@@ -23,6 +24,7 @@ export class TenantAdminResolver {
     constructor(
         private tenantService: TenantService,
         private tenantProvisioningService: TenantProvisioningService,
+        private auditService: AuditService,
     ) { }
 
     @Query()
@@ -50,6 +52,15 @@ export class TenantAdminResolver {
         @Args() args: { slug: string },
     ) {
         return this.tenantService.findBySlug(ctx, args.slug);
+    }
+
+    @Query()
+    @Allow(Permission.SuperAdmin)
+    async auditLogs(
+        @Ctx() ctx: RequestContext,
+        @Args() args: { options?: { take?: number; skip?: number; action?: string; severity?: string; tenantId?: string } },
+    ) {
+        return this.auditService.findAll(ctx, args.options);
     }
 
     @Transaction()

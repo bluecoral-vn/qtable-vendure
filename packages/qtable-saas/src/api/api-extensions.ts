@@ -115,6 +115,32 @@ export const adminApiExtensions = gql`
         tenants(options: TenantListOptions): TenantList!
         tenant(id: ID!): Tenant
         tenantBySlug(slug: String!): Tenant
+        auditLogs(options: AuditLogListOptions): AuditLogList!
+    }
+
+    type AuditLog implements Node {
+        id: ID!
+        createdAt: DateTime!
+        action: String!
+        severity: String!
+        userId: Int
+        channelId: Int
+        tenantId: Int
+        metadata: JSON!
+        ipAddress: String
+    }
+
+    type AuditLogList implements PaginatedList {
+        items: [AuditLog!]!
+        totalItems: Int!
+    }
+
+    input AuditLogListOptions {
+        take: Int
+        skip: Int
+        action: String
+        severity: String
+        tenantId: ID
     }
 
     extend type Mutation {
