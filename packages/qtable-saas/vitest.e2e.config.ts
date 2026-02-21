@@ -18,10 +18,8 @@ export default defineConfig({
         include: ['e2e/**/*.e2e-spec.ts'],
         testTimeout: 30_000,
         hookTimeout: 120_000,
-        poolOptions: {
-            forks: {
-                singleFork: true,
-            },
-        },
+        // Each test file gets its own fork to avoid TypeORM metadata
+        // sharing issues when multiple test files create/destroy DataSources
+        fileParallelism: false,
     },
 });

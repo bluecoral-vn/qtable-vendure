@@ -10,6 +10,7 @@ import { TenantResolutionService } from '../services/tenant-resolution.service';
  * which Channel to use for the current request.
  */
 const CHANNEL_TOKEN_KEY = 'vendure-token';
+const loggerCtx = 'TenantContextMiddleware';
 
 /**
  * TenantContextMiddleware — resolves the tenant from the incoming
@@ -19,7 +20,8 @@ const CHANNEL_TOKEN_KEY = 'vendure-token';
  * 1. Extract domain from Host header
  * 2. Skip if domain is localhost/dev (no tenant resolution needed)
  * 3. Resolve domain → TenantDomain → Tenant → Channel.token
- * 4. Override the `vendure-token` header with the resolved channel token
+ * 4. ALWAYS override the `vendure-token` header with the resolved channel token
+ *    (even if user already supplied one — prevents token substitution attacks)
  * 5. Attach tenant metadata to the request for downstream use
  *
  * This middleware MUST run before Vendure's RequestContextService
@@ -45,9 +47,8 @@ export class TenantContextMiddleware implements NestMiddleware {
         const host = req.get('host') || req.get('x-forwarded-host') || '';
         const domain = host.split(':')[0].toLowerCase();
 
-        // Skip tenant resolution for dev/localhost or if vendure-token
-        // is already explicitly set (allowing manual override for admin API)
-        if (this.skipDomains.has(domain) || req.headers[CHANNEL_TOKEN_KEY]) {
+        // Skip tenant resolution for dev/localhost
+        if (this.skipDomains.has(domain)) {
             return next();
         }
 
@@ -55,7 +56,22 @@ export class TenantContextMiddleware implements NestMiddleware {
             const resolution = await this.tenantResolutionService.resolve(domain);
 
             if (resolution) {
-                // Override vendure-token header so Vendure resolves to the tenant's channel
+                // Log token mismatch (potential token substitution attack)
+                const existingToken = req.headers[CHANNEL_TOKEN_KEY];
+                if (existingToken && existingToken !== resolution.channelToken) {
+                    Logger.warn(
+                        `Token mismatch: supplied="${String(existingToken)}", resolved="${resolution.channelToken}" for domain="${domain}"`,
+                        loggerCtx,
+                    );
+                    // Attach mismatch flag for audit logging downstream
+                    (req as any).__tokenMismatch = {
+                        supplied: String(existingToken),
+                        resolved: resolution.channelToken,
+                        domain,
+                    };
+                }
+
+                // ALWAYS override vendure-token — domain resolution is authoritative
                 req.headers[CHANNEL_TOKEN_KEY] = resolution.channelToken;
 
                 // Attach tenant metadata to request for downstream use
@@ -65,12 +81,17 @@ export class TenantContextMiddleware implements NestMiddleware {
                     status: resolution.tenantStatus,
                     channelToken: resolution.channelToken,
                 };
+            } else {
+                // Domain does not match any tenant → should not reach Vendure
+                // Return 404 to prevent fallback to Default Channel
+                _res.status(404).json({
+                    message: 'Tenant not found for this domain',
+                });
+                return;
             }
-            // If no resolution found, request proceeds without a channel token
-            // (Vendure will use the default channel)
         } catch (error) {
             // Log but don't block — fail open to default channel
-            Logger.error('[TenantContextMiddleware] Error resolving tenant: ' + String(error), 'TenantContextMiddleware');
+            Logger.error('[TenantContextMiddleware] Error resolving tenant: ' + String(error), loggerCtx);
         }
 
         next();
